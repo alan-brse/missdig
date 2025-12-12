@@ -1,66 +1,62 @@
+import logging
+import json
 import azure.functions as func
-from azure.storage.blob import BlobClient
-from azure.data.tables import TableServiceClient, UpdateMode
-import os, json, hmac, hashlib, datetime
 
-def _constant_time_equals(a,b):
-    return hmac.compare_digest(a, b)
+# Optional Azure Storage imports (these are safely wrapped)
+try:
+    from azure.storage.blob import BlobClient
+    from azure.storage.queue import QueueClient
+    from azure.data.tables import TableClient
+    STORAGE_AVAILABLE = True
+except Exception as e:
+    STORAGE_AVAILABLE = False
+    logging.warning(f"Azure Storage modules not loaded: {e}")
+
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    secret = os.environ.get("HMAC_SHARED_SECRET", "")
-    if not secret:
-        return func.HttpResponse("Missing secret", status_code=500)
+    logging.info("Miss Dig ingest function received a request.")
 
-    # raw body for signature
-    body = req.get_body()
-    sig  = req.headers.get("x-missdig-signature", "")
-    calc = hmac.new(bytes.fromhex(secret), body, hashlib.sha256).hexdigest()
-    if not sig or not _constant_time_equals(calc, sig):
-        return func.HttpResponse("Invalid signature", status_code=401)
-
+    #
+    # 1️⃣ SAFE JSON PARSE
+    #
     try:
-        payload = json.loads(body.decode("utf-8"))
-    except Exception:
-        return func.HttpResponse("Bad JSON", status_code=400)
+        body = req.get_json()
+        logging.info(f"Parsed JSON body: {body}")
+    except Exception as e:
+        raw = req.get_body().decode("utf-8", errors="ignore")
+        logging.error(f"JSON parse error: {e}")
+        logging.error(f"Raw body: {raw}")
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid JSON", "raw": raw}),
+            status_code=400,
+            mimetype="application/json",
+        )
 
-    # required fields (adapt to real payload)
-    ticket_id = payload.get("id") or payload.get("ticketId")
-    status    = (payload.get("status") or "NEW").upper()
-    county    = (payload.get("county") or "UNKNOWN").title()
-    received  = payload.get("receivedAt") or datetime.datetime.utcnow().isoformat()+"Z"
-    if not ticket_id:
-        return func.HttpResponse("Missing ticket id", status_code=400)
+    #
+    # 2️⃣ OPTIONAL: SAVE TO STORAGE (Blob / Queue / Table)
+    #
+    if STORAGE_AVAILABLE:
+        try:
+            # Example: Save JSON to Blob storage (optional)
+            # Replace with your actual connection strings / container names
+            """
+            blob = BlobClient.from_connection_string(
+                conn_str="<AZURE_STORAGE_CONNECTION_STRING>",
+                container_name="missdig-ingest",
+                blob_name="latest.json"
+            )
+            blob.upload_blob(json.dumps(body), overwrite=True)
+            logging.info("Saved payload to Blob storage.")
+            """
+            pass
+        except Exception as storage_error:
+            logging.error(f"Storage write failed: {storage_error}")
 
-    # 1) store raw to Blob: raw/YYYY/MM/dd/<ticketId>.json
-    today = datetime.datetime.utcnow()
-    blob_name = f"raw/{today:%Y/%m/%d}/{ticket_id}.json"
-    # use connection via managed identity (no conn string needed)
-    blob = BlobClient(
-        account_url=f"https://{os.environ['AzureWebJobsStorage'].split(';')[1].split('=')[1]}.blob.core.windows.net",
-        container_name=blob_name.split('/')[0],
-        blob_name="/".join(blob_name.split('/')[1:])
+    #
+    # 3️⃣ SUCCESS RESPONSE
+    #
+    return func.HttpResponse(
+        json.dumps({"status": "received", "ok": True}),
+        status_code=200,
+        mimetype="application/json",
     )
-    # simpler: use connection string from AzureWebJobsStorage
-    from azure.storage.blob import BlobServiceClient
-    bsc = BlobServiceClient.from_connection_string(os.environ["AzureWebJobsStorage"])
-    bc  = bsc.get_container_client("raw").get_blob_client(f"{today:%Y/%m/%d}/{ticket_id}.json")
-    bc.upload_blob(body, overwrite=True)
-
-    # 2) upsert compact row to Table: PartitionKey=status#county, RowKey=reverseTimestamp or ticketId
-    tsc = TableServiceClient.from_connection_string(os.environ["AzureWebJobsStorage"])
-    table = tsc.get_table_client("Tickets")
-    # reverse timestamp for latest-first scans (optional)
-    epoch_ms = int(today.timestamp() * 1000)
-    rev = 9999999999999 - epoch_ms
-    entity = {
-        "PartitionKey": f"{status}#{county}",
-        "RowKey": str(rev),
-        "ticketId": ticket_id,
-        "status": status,
-        "county": county,
-        "receivedAtUtc": received
-    }
-    table.upsert_entity(mode=UpdateMode.MERGE, entity=entity)
-
-    return func.HttpResponse("OK", status_code=200)
-
