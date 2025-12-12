@@ -1,10 +1,10 @@
 import logging
 import json
 import azure.functions as func
-from azure.storage.queue import QueueClient
 import os
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
+    from azure.storage.queue import QueueClient
     logging.info("Miss Dig ingest function hit.")
 
     # Parse JSON safely
