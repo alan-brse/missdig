@@ -1,28 +1,31 @@
+import logging
+import json
 import azure.functions as func
-from azure.data.tables import TableServiceClient
-import os, json
+from azure.data.tables import TableClient
+import os
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
-    status = (req.params.get("status") or "NEW").upper()
-    county = (req.params.get("county") or "UNKNOWN").title()
-    limit  = int(req.params.get("limit") or "200")
+def main(msg: func.QueueMessage) -> None:
+    logging.info("tickets() processor running.")
+    
+    body = msg.get_body().decode("utf-8")
+    data = json.loads(body)
+    logging.info(f"Processing ticket: {data}")
 
-    tsc = TableServiceClient.from_connection_string(os.environ["AzureWebJobsStorage"])
-    table = tsc.get_table_client("Tickets")
+    # Insert record into Table Storage
+    try:
+        table = TableClient.from_connection_string(
+            conn_str=os.environ["AzureWebJobsStorage"],
+            table_name="MissDigTickets"
+        )
+        table.create_table_if_not_exists()
 
-    pk = f"{status}#{county}"
-    # Table queries don't sort server-side; we used reverse timestamp in RowKey so scanning ascending returns newest first.
-    entities = table.query_entities(f"PartitionKey eq '{pk}'")
-    rows = []
-    for e in entities:
-        rows.append({
-            "ticketId": e.get("ticketId"),
-            "status": e.get("status"),
-            "county": e.get("county"),
-            "receivedAtUtc": e.get("receivedAtUtc")
-        })
-        if len(rows) >= limit:
-            break
+        entity = {
+            "PartitionKey": "MissDig",
+            "RowKey": data.get("ticket_id", msg.id),
+            "Payload": body
+        }
 
-    return func.HttpResponse(json.dumps(rows), headers={"Content-Type":"application/json"})
-
+        table.upsert_entity(entity)
+        logging.info("Stored ticket in Table Storage.")
+    except Exception as e:
+        logging.error(f"Table insert failed: {e}")
