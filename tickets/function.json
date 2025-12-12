@@ -1,14 +1,12 @@
 {
+  "scriptFile": "__init__.py",
   "bindings": [
     {
-      "authLevel": "anonymous",
-      "type": "httpTrigger",
+      "type": "queueTrigger",
       "direction": "in",
-      "name": "req",
-      "methods": ["get"],
-      "route": "tickets"
-    },
-    { "type": "http", "direction": "out", "name": "res" }
+      "name": "msg",
+      "queueName": "missdig-tickets",
+      "connection": "AzureWebJobsStorage"
+    }
   ]
 }
-
