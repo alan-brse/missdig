@@ -7,9 +7,13 @@ import hashlib
 import base64
 
 from azure.storage.queue import QueueClient
+from azure.data.tables import TableServiceClient
 
 # Load signing key from Azure Function App Settings
 SIGNING_KEY = os.environ.get("MISS_DIG_SIGNING_KEY", "").encode("utf-8")
+TABLE_CONN = os.environ["AzureWebJobsStorage"]
+TABLE_NAME = "missdigdedup"
+
 
 def verify_signature(raw_body: bytes, signature_header: str) -> bool:
     """
@@ -22,7 +26,6 @@ def verify_signature(raw_body: bytes, signature_header: str) -> bool:
 
     sent_hash = signature_header.replace("sha256=", "").strip()
 
-    # Compute HMAC SHA256 using your signing key
     computed = hmac.new(
         SIGNING_KEY,
         raw_body,
@@ -39,10 +42,33 @@ def verify_signature(raw_body: bytes, signature_header: str) -> bool:
         return False
 
 
+def check_duplicate(notification_id: str) -> bool:
+    """Return True if NotificationId already processed."""
+    table_client = TableServiceClient.from_connection_string(TABLE_CONN).get_table_client(TABLE_NAME)
+    table_client.create_table_if_not_exists()
+
+    try:
+        table_client.get_entity(partition_key="notif", row_key=notification_id)
+        logging.info("Duplicate notification detected — skipping processing.")
+        return True
+    except Exception:
+        return False
+
+
+def mark_processed(notification_id: str, event_type: str):
+    """Record NotificationId so future duplicates are ignored."""
+    table_client = TableServiceClient.from_connection_string(TABLE_CONN).get_table_client(TABLE_NAME)
+    entity = {
+        "PartitionKey": "notif",
+        "RowKey": notification_id,
+        "Event": event_type
+    }
+    table_client.create_entity(entity)
+
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Miss Dig ingest function hit.")
 
-    # Raw body (needed for signature hash calculation)
     raw_body = req.get_body()
 
     # Retrieve signature header
@@ -61,6 +87,25 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"JSON parse failed: {e}")
         return func.HttpResponse("Invalid JSON", status_code=400)
 
+    # Extract NotificationId
+    notification_id = body.get("NotificationId")
+    event_type = body.get("Event")
+
+    if not notification_id:
+        logging.error("Missing NotificationId — required for deduplication.")
+        return func.HttpResponse("Bad Request", status_code=400)
+
+    # DEDUP CHECK BEFORE QUEUEING
+    if check_duplicate(notification_id):
+        return func.HttpResponse(
+            json.dumps({"status": "duplicate", "queued": False}),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    # Mark this notification as processed
+    mark_processed(notification_id, event_type)
+
     # Convert to string for queue
     msg = json.dumps(body)
 
@@ -70,13 +115,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             conn_str=os.environ["AzureWebJobsStorage"],
             queue_name="missdig-tickets"
         )
-        queue.create_queue()  # Creates or no-op if exists
+        queue.create_queue()
         queue.send_message(msg)
         logging.info("Message queued successfully.")
     except Exception as e:
         logging.error(f"Queue write error: {e}")
 
-    # Respond fast — MISS DIG requires <5 seconds turnaround
     return func.HttpResponse(
         json.dumps({"status": "received", "queued": True}),
         mimetype="application/json",
