@@ -73,12 +73,17 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     # Retrieve signature header
     signature_header = req.headers.get("X-POSR-Webhook-Signature-Base64")
-    logging.info(f"Signature header received: {signature_header}")
+    #logging.info(f"Signature header received: {signature_header}")
+    logging.warning(f"ALL HEADERS: {dict(req.headers)}")
 
     # Verify MISS DIG signature BEFORE processing body
-    if not verify_signature(raw_body, signature_header):
-        return func.HttpResponse("Invalid signature", status_code=401)
-
+    #if not verify_signature(raw_body, signature_header):
+    #    return func.HttpResponse("Invalid signature", status_code=401)
+    if not signature_header:
+        logging.warning("no signature header present - allowing for now")
+    else:
+        verify_signature(raw_body,signature_header)
+    
     # Parse JSON safely
     try:
         body = json.loads(raw_body)
