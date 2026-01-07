@@ -13,6 +13,10 @@ SIGNING_KEY = os.environ.get("MISS_DIG_SIGNING_KEY", "").encode("utf-8")
 TABLE_CONN = os.environ["AzureWebJobsStorage"]
 TABLE_NAME = "missdigdedup"
 
+table_service = TableServiceClient.from_connection_string(TABLE_CONN)
+table_service.create_table_if_not_exists(TABLE_NAME)
+table_client = table_service.get_table_client(TABLE_NAME)
+
 
 def get_signature(headers):
     for name in ("X-POSR-Webhook-Signature", "X-Signature"):
@@ -40,32 +44,42 @@ def verify_signature(raw_body: bytes, headers) -> bool:
         hashlib.sha256
     ).hexdigest().lower()
 
-    logging.info(f"HMAC calc={calc_hex}")
-    logging.info(f"HMAC recv={recv_hex}")
+    logging.debug("HMAC verification performed")
 
     return hmac.compare_digest(calc_hex, recv_hex)
 
 
 def check_duplicate(notification_id: str) -> bool:
-    table_client = TableServiceClient.from_connection_string(TABLE_CONN).get_table_client(TABLE_NAME)
-    table_client.create_table_if_not_exists()
+    #service = TableServiceClient.from_connection_string(TABLE_CONN)
+    #service.create_table_if_not_exists(TABLE_NAME)
+    #table_client = service.get_table_client(TABLE_NAME)
 
     try:
-        table_client.get_entity(partition_key="notif", row_key=notification_id)
-        logging.info("Duplicate notification detected — skipping.")
+        table_client.get_entity(
+            partition_key="notif",
+            row_key=notification_id
+        )
+        #table_client.get_entity(partition_key="notif", row_key=notification_id)
+        #logging.info("Duplicate notification detected — skipping.")
         return True
     except Exception:
         return False
 
 
 def mark_processed(notification_id: str, event_type: str):
-    table_client = TableServiceClient.from_connection_string(TABLE_CONN).get_table_client(TABLE_NAME)
-    table_client.create_entity({
+    #service = TableServiceClient.from_connection_string(TABLE_CONN)
+    #service.create_table_if_not_exists(TABLE_NAME)
+    #table_client = service.get_table_client(TABLE_NAME)
+    
+    entity = {
         "PartitionKey": "notif",
         "RowKey": notification_id,
         "Event": event_type
-    })
-
+    }
+    try:
+        table_client.create_entity(entity)
+    except Exception:
+        pass
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Miss Dig ingest function hit.")
