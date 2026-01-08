@@ -25,7 +25,10 @@ blob_service = BlobServiceClient.from_connection_string(
     os.environ["AzureWebJobsStorage"]
 )
 blob_container = blob_service.get_container_client(BLOB_CONTAINER)
-blob_container.create_container(exist_ok=True)
+try:
+    blob_container.create_container()
+except Exception:
+    pass
 
 QUEUE_NAME = "missdig-tickets"
 queue_client = QueueClient.from_connection_string(
@@ -129,10 +132,10 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     if not verify_signature(raw_body, req.headers):
         return func.HttpResponse("Invalid signature", status_code=401)
 
-    # 📦 Parse JSON (best-effort, never required)
+    # 📦 Parse JSON (best-effort only)
     try:
         body = json.loads(raw_body)
-        logging.info(f"Received JSON: {body}")
+        logging.info(f"Received JSON")
     except Exception:
         logging.warning("Payload not JSON; storing raw only")
         body = {}
@@ -141,7 +144,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     notification_id = body.get("NotificationId") or str(uuid.uuid4())
     event_type = body.get("Event") or body.get("EventType") or "unknown"
 
-    # 🧱 RAW BLOB STORAGE — ALWAYS FIRST
+    # 🧱 RAW BLOB STORAGE — ALWAYS
     try:
         write_raw_blob(raw_body, event_type, notification_id)
     except Exception as e:
@@ -172,6 +175,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         mimetype="application/json",
         status_code=200
     )
+
 
 
 
