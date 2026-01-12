@@ -1,83 +1,49 @@
 import logging
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import azure.functions as func
 from azure.data.tables import TableServiceClient
 
-TABLE_NAME = "missdigtickets"
-TABLE_CONN = os.environ["AzureWebJobsStorage"]
+TABLE_NAME = "MissDigTickets"
+STORAGE_CONN = os.environ["AzureWebJobsStorage"]
+
+table_service = TableServiceClient.from_connection_string(STORAGE_CONN)
+table_client = table_service.get_table_client(TABLE_NAME)
 
 
 def main(blob: func.InputStream):
-    logging.info(
-        f"BlobToTable fired for {blob.name}, size={blob.length} bytes"
-    )
+    logging.info(f"BlobToTable fired for {blob.name}")
 
-    # Parse normalized blob
     try:
-        data = json.loads(blob.read())
+        raw = json.loads(blob.read().decode("utf-8"))
     except Exception as e:
-        logging.error(f"Invalid JSON in normalized blob: {e}")
+        logging.error(f"Invalid JSON in blob {blob.name}: {e}")
         return
 
-    # --- Extract required fields ---
-    ticket = data["ticket"]
-    location = ticket["location"]
-    work = ticket.get("work", {})
+    ticket_number = raw.get("TicketNumber")
+    event_type = raw.get("Event")
+    event_time = raw.get("TimeStamp")
 
-    ticket_number = ticket["ticket_number"]
+    if not ticket_number or not event_type:
+        logging.error("Missing TicketNumber or Event — skipping")
+        return
 
-    state = location.get("state", "UNK")
-    county = location.get("county", "UNK")
+    now = datetime.now(timezone.utc).isoformat()
 
-    partition_key = f"{state}|{county}"
-    row_key = ticket_number
-
-    # --- Build Table entity ---
     entity = {
-        "PartitionKey": partition_key,
-        "RowKey": row_key,
+        "PartitionKey": ticket_number,
+        "RowKey": "ticket",
 
-        "schema_version": data.get("schema_version"),
-
-        "ticket_number": ticket_number,
-        "request_type": ticket.get("request_type"),
-
-        "event_type": data.get("event_type"),
-        "event_timestamp": data.get("event_timestamp"),
-
-        "state": state,
-        "county": county,
-        "city": location.get("city"),
-
-        "street": location.get("street"),
-        "cross_street": location.get("cross_street"),
-
-        "work_start_date": work.get("start_date"),
-        "work_end_date": work.get("end_date"),
-
-        "excavator_company": ticket.get("excavator", {}).get("company"),
-
-        "utilities_affected": len(ticket.get("utilities", [])),
-        "positive_responses": sum(
-            1 for u in ticket.get("utilities", [])
-            if u.get("status") == "POSITIVE"
-        ),
-
-        "normalized_blob_path": blob.name,
-        "last_updated_utc": datetime.utcnow().isoformat()
+        "TicketNumber": ticket_number,
+        "LastEventType": event_type,
+        "LastEventAt": event_time or now,
+        "LastRawBlobUri": blob.uri,
     }
 
-    # --- Write to Table ---
     try:
-        service = TableServiceClient.from_connection_string(TABLE_CONN)
-        table = service.create_table_if_not_exists(TABLE_NAME)
-
-        table.upsert_entity(entity=entity)
-        logging.info(f"Upserted ticket {ticket_number}")
-
+        table_client.upsert_entity(entity=entity, mode="MERGE")
+        logging.info(f"Upserted base ticket row {ticket_number}")
     except Exception as e:
         logging.error(f"Table write failed for {ticket_number}: {e}")
-
