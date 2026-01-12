@@ -1,31 +1,45 @@
-import logging
 import json
-import azure.functions as func
-from azure.data.tables import TableClient
 import os
+import logging
+import azure.functions as func
+from azure.data.tables import TableServiceClient
 
-def main(msg: func.QueueMessage) -> None:
-    logging.info("tickets() processor running.")
-    
-    body = msg.get_body().decode("utf-8")
-    data = json.loads(body)
-    logging.info(f"Processing ticket: {data}")
+TABLE_NAME = "MissDigTickets"
+CONN_STR = os.environ["AzureWebJobsStorage"]
 
-    # Insert record into Table Storage
-    try:
-        table = TableClient.from_connection_string(
-            conn_str=os.environ["AzureWebJobsStorage"],
-            table_name="MissDigTickets"
-        )
-        table.create_table_if_not_exists()
 
-        entity = {
-            "PartitionKey": "MissDig",
-            "RowKey": data.get("ticket_id", msg.id),
-            "Payload": body
-        }
+def derive_status(event_type: str) -> str:
+    return {
+        "TICKET CREATION": "OPEN",
+        "MEMBER RESPONSE": "RESPONSES_IN_PROGRESS",
+        "ALL MEMBERS RESPONDED": "READY",
+        "LEGAL START DATE": "LEGAL_START"
+    }.get(event_type, "UNKNOWN")
 
-        table.upsert_entity(entity)
-        logging.info("Stored ticket in Table Storage.")
-    except Exception as e:
-        logging.error(f"Table insert failed: {e}")
+
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info("GET /tickets called")
+
+    service = TableServiceClient.from_connection_string(CONN_STR)
+    table = service.get_table_client(TABLE_NAME)
+
+    rows = table.query_entities("RowKey eq 'ticket'")
+    tickets = []
+
+    for e in rows:
+        event_type = e.get("event_type")
+
+        tickets.append({
+            "ticketNumber": e.get("ticket_number"),
+            "status": derive_status(event_type),
+            "eventType": event_type,
+            "digsiteAddress": e.get("DigsiteAddress"),
+            "legalStartDate": e.get("LegalStartDateTime"),
+            "lastUpdated": e.get("last_updated_utc")
+        })
+
+    return func.HttpResponse(
+        json.dumps(tickets),
+        mimetype="application/json",
+        status_code=200
+    )

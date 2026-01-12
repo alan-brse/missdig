@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Miss Dig Tickets</title>
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 24px;
+      background: #f8f9fb;
+    }
+
+    h1 {
+      margin-bottom: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      background: white;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f1f5f9;
+      font-weight: 600;
+    }
+
+    tr:hover {
+      background: #f9fafb;
+    }
+
+    .status {
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+
+    .OPEN { background: #e0f2fe; color: #0369a1; }
+    .RESPONSES_IN_PROGRESS { background: #fef3c7; color: #92400e; }
+    .READY { background: #dcfce7; color: #166534; }
+    .LEGAL_START { background: #fee2e2; color: #991b1b; }
+
+    .muted {
+      color: #6b7280;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Miss Dig Tickets</h1>
+  <p class="muted">Live ticket status overview</p>
+
+  <table id="tickets">
+    <thead>
+      <tr>
+        <th>Ticket #</th>
+        <th>Status</th>
+        <th>Event</th>
+        <th>Address</th>
+        <th>Legal Start</th>
+        <th>Last Updated</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function loadTickets() {
+      const res = await fetch("/tickets");
+      const data = await res.json();
+
+      const tbody = document.querySelector("#tickets tbody");
+      tbody.innerHTML = "";
+
+      for (const t of data) {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>${t.ticketNumber}</td>
+          <td><span class="status ${t.status}">${t.status}</span></td>
+          <td>${t.eventType}</td>
+          <td>${t.digsiteAddress ?? ""}</td>
+          <td>${t.legalStartDate ?? ""}</td>
+          <td class="muted">${new Date(t.lastUpdated).toLocaleString()}</td>
+        `;
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    loadTickets();
+    setInterval(loadTickets, 60000); // refresh every minute
+  </script>
+</body>
+</html>
