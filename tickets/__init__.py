@@ -1,45 +1,27 @@
 import json
-import os
 import logging
+import os
 import azure.functions as func
-from azure.data.tables import TableServiceClient
-
-TABLE_NAME = "MissDigTickets"
-CONN_STR = os.environ["AzureWebJobsStorage"]
-
-
-def derive_status(event_type: str) -> str:
-    return {
-        "TICKET CREATION": "OPEN",
-        "MEMBER RESPONSE": "RESPONSES_IN_PROGRESS",
-        "ALL MEMBERS RESPONDED": "READY",
-        "LEGAL START DATE": "LEGAL_START"
-    }.get(event_type, "UNKNOWN")
-
+from azure.data.tables import TableClient
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info("GET /tickets called")
+    table = TableClient.from_connection_string(
+        conn_str=os.environ["AzureWebJobsStorage"],
+        table_name="MissDigTickets"
+    )
 
-    service = TableServiceClient.from_connection_string(CONN_STR)
-    table = service.get_table_client(TABLE_NAME)
+    entities = list(table.list_entities())
 
-    rows = table.query_entities("RowKey eq 'ticket'")
-    tickets = []
+    logging.warning(f"[DEBUG] MissDigTickets row count: {len(entities)}")
 
-    for e in rows:
-        event_type = e.get("event_type")
-
-        tickets.append({
-            "ticketNumber": e.get("ticket_number"),
-            "status": derive_status(event_type),
-            "eventType": event_type,
-            "digsiteAddress": e.get("DigsiteAddress"),
-            "legalStartDate": e.get("LegalStartDateTime"),
-            "lastUpdated": e.get("last_updated_utc")
-        })
+    # Convert to plain JSON-safe objects
+    rows = []
+    for e in entities:
+        row = dict(e)
+        rows.append(row)
 
     return func.HttpResponse(
-        json.dumps(tickets),
+        json.dumps(rows, default=str),
         mimetype="application/json",
         status_code=200
     )
