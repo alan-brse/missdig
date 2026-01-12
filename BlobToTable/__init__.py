@@ -34,8 +34,6 @@ def main(blob: func.InputStream):
         event_type = event_type or notification.get("Event")
         event_time = event_time or notification.get("TimeStamp")
 
-
-
     if not ticket_number or not event_type:
         logging.error("Missing TicketNumber or Event — skipping")
         return
