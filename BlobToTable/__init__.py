@@ -22,9 +22,11 @@ def main(blob: func.InputStream):
         logging.error(f"Invalid JSON in blob {blob.name}: {e}")
         return
 
-    ticket_number = raw.get("TicketNumber")
-    event_type = raw.get("Event")
-    event_time = raw.get("TimeStamp")
+    notification = raw.get("Notification", {})
+
+    ticket_number = notification.get("TicketNumber")
+    event_type = notification.get("Event")
+    event_time = notification.get("TimeStamp")
 
     if not ticket_number or not event_type:
         logging.error("Missing TicketNumber or Event — skipping")
