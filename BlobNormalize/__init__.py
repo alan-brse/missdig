@@ -25,56 +25,59 @@ def map_event_type(missdig_event: str) -> str:
 def normalize_ticket(raw: dict, blob_uri: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
 
-    ticket_id = raw.get("TicketNumber") or raw.get("ticketNumber") or raw.get("TicketId")
+    ticket_id = raw.get("TicketNumber")
+
+    if not ticket_id:
+        raise ValueError("Missing TicketNumber")
 
     normalized = {
         "schema_version": "1.0",
+
         "source": {
             "system": "MISS_DIG",
             "vendor_ticket_id": ticket_id,
             "notification_id": raw.get("NotificationId"),
         },
+
         "event": {
             "type": map_event_type(raw.get("Event")),
             "occurred_at": raw.get("TimeStamp"),
             "received_at": now,
         },
+
         "ticket": {
             "id": ticket_id,
             "status": "ACTIVE",
             "priority": "NORMAL",
-            "expires_at": raw.get("ExpirationDate"),
+            "legal_start_at": raw.get("LegalStartDateTime"),
         },
+
         "location": {
             "address": {
                 "full": raw.get("DigsiteAddress"),
-                "city": raw.get("City"),
-                "state": raw.get("State"),
-                "postal_code": raw.get("Zip"),
-            },
-            "coordinates": {"lat": None, "lon": None},
+            }
         },
-        "work": {
-            "type": "EXCAVATION",
-            "description": raw.get("WorkDescription"),
-            "start_date": raw.get("DigStartDate"),
-            "end_date": raw.get("DigEndDate"),
-        },
+
         "utilities": [
             {
-                "type": u.get("Type"),
-                "owner": u.get("Owner"),
-                "status": "NOTIFIED",
+                "station_code": m.get("StationCodeId"),
+                "station_name": m.get("StationCodeName"),
+                "response_code": m.get("ResponseCode"),
+                "response_received_at": m.get("ResponseReceivedDateTime"),
+                "comments": m.get("PosrComments"),
             }
-            for u in (raw.get("Utilities") or [])
+            for m in raw.get("Members", [])
         ],
+
         "metadata": {
             "raw_blob_uri": blob_uri,
             "processed_at": now,
+            "message_version": raw.get("MessageVersion"),
         },
     }
 
     return normalized
+
 
 
 def main(inputblob: func.InputStream):
