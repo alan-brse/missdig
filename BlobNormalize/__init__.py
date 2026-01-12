@@ -4,18 +4,20 @@ import os
 from datetime import datetime, timezone
 
 import azure.functions as func
-from azure.storage.queue import QueueClient
+from azure.storage.blob import BlobServiceClient
 
-
-QUEUE_NAME = "missdig-normalized-events"
 STORAGE_CONN = os.environ["AzureWebJobsStorage"]
+
+RAW_CONTAINER = "missdig-raw"
+NORM_CONTAINER = "missdig-normalized"
 
 
 def map_event_type(missdig_event: str) -> str:
     mapping = {
         "TICKET CREATION": "TICKET_CREATED",
         "TICKET UPDATE": "TICKET_UPDATED",
-        "TICKET CANCELLED": "TICKET_CANCELLED"
+        "TICKET CANCELLED": "TICKET_CANCELLED",
+        "MEMBER RESPONSE": "MEMBER_RESPONSE",
     }
     return mapping.get(missdig_event, "UNKNOWN")
 
@@ -23,90 +25,100 @@ def map_event_type(missdig_event: str) -> str:
 def normalize_ticket(raw: dict, blob_uri: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
 
+    ticket_id = raw.get("TicketNumber") or raw.get("ticketNumber") or raw.get("TicketId")
+
     normalized = {
         "schema_version": "1.0",
-
         "source": {
             "system": "MISS_DIG",
-            "vendor_ticket_id": raw.get("TicketNumber"),
-            "notification_id": raw.get("NotificationId")
+            "vendor_ticket_id": ticket_id,
+            "notification_id": raw.get("NotificationId"),
         },
-
         "event": {
             "type": map_event_type(raw.get("Event")),
             "occurred_at": raw.get("TimeStamp"),
-            "received_at": now
+            "received_at": now,
         },
-
         "ticket": {
-            "id": raw.get("TicketNumber"),
+            "id": ticket_id,
             "status": "ACTIVE",
             "priority": "NORMAL",
-            "expires_at": raw.get("ExpirationDate")
+            "expires_at": raw.get("ExpirationDate"),
         },
-
         "location": {
             "address": {
                 "full": raw.get("DigsiteAddress"),
                 "city": raw.get("City"),
                 "state": raw.get("State"),
-                "postal_code": raw.get("Zip")
+                "postal_code": raw.get("Zip"),
             },
-            "coordinates": {
-                "lat": None,
-                "lon": None
-            }
+            "coordinates": {"lat": None, "lon": None},
         },
-
         "work": {
             "type": "EXCAVATION",
             "description": raw.get("WorkDescription"),
             "start_date": raw.get("DigStartDate"),
-            "end_date": raw.get("DigEndDate")
+            "end_date": raw.get("DigEndDate"),
         },
-
         "utilities": [
             {
                 "type": u.get("Type"),
                 "owner": u.get("Owner"),
-                "status": "NOTIFIED"
+                "status": "NOTIFIED",
             }
-            for u in raw.get("Utilities", [])
+            for u in (raw.get("Utilities") or [])
         ],
-
         "metadata": {
             "raw_blob_uri": blob_uri,
-            "processed_at": now
-        }
+            "processed_at": now,
+        },
     }
 
     return normalized
 
 
 def main(inputblob: func.InputStream):
-    logging.info(f"Processing blob: {inputblob.name}")
+    logging.info(f"BlobNormalize fired for: {inputblob.name} ({inputblob.length} bytes)")
 
+    # 1) Read raw blob
     try:
         raw_bytes = inputblob.read()
         raw_json = json.loads(raw_bytes.decode("utf-8"))
     except Exception as e:
         logging.error(f"Failed to read/parse blob {inputblob.name}: {e}")
-        raise
+        return  # don't poison
 
-    blob_uri = f"{inputblob.uri}"
+    # 2) Normalize
+    try:
+        normalized = normalize_ticket(raw_json, getattr(inputblob, "uri", inputblob.name))
+        ticket_id = normalized["ticket"]["id"]
+        if not ticket_id:
+            logging.error("Missing ticket id after normalization; skipping")
+            return
+    except Exception as e:
+        logging.error(f"Normalization failed for {inputblob.name}: {e}")
+        return  # don't poison
 
-    normalized = normalize_ticket(raw_json, blob_uri)
+    # 3) Write normalized blob (canonical output)
+    try:
+        now = datetime.now(timezone.utc)
+        out_path = f"{now:%Y/%m/%d}/{ticket_id}.json"
 
-    queue = QueueClient.from_connection_string(
-        conn_str=STORAGE_CONN,
-        queue_name=QUEUE_NAME
-    )
+        blob_service = BlobServiceClient.from_connection_string(STORAGE_CONN)
+        out_container = blob_service.get_container_client(NORM_CONTAINER)
+        try:
+            out_container.create_container()
+        except Exception:
+            pass
 
-    queue.send_message(
-        json.dumps(normalized),
-        visibility_timeout=0
-    )
+        out_blob = out_container.get_blob_client(out_path)
+        out_blob.upload_blob(
+            json.dumps(normalized, ensure_ascii=False),
+            overwrite=True,
+            content_type="application/json",
+        )
 
-    logging.info(
-        f"Normalized ticket enqueued: {normalized['ticket']['id']}"
-    )
+        logging.info(f"Wrote normalized blob: {NORM_CONTAINER}/{out_path}")
+    except Exception as e:
+        logging.error(f"Failed writing normalized blob for {ticket_id}: {e}")
+        return
