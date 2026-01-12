@@ -52,7 +52,7 @@ def main(blob: func.InputStream):
     }
 
     try:
-        table_client.upsert_entity(entity=entity, mode="MERGE")
+        table_client.upsert_entity(entity)
         logging.info(f"Upserted base ticket row {ticket_number}")
     except Exception as e:
         logging.error(f"Table write failed for {ticket_number}: {e}")
