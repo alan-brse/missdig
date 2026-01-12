@@ -5,7 +5,7 @@
       "name": "blob",
       "type": "blobTrigger",
       "direction": "in",
-      "path": "missdig-normalized/{name}",
+      "path": "missdig-raw/{name}",
       "connection": "AzureWebJobsStorage"
     }
   ]
