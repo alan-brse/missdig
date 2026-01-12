@@ -5,7 +5,7 @@
       "name": "inputblob",
       "type": "blobTrigger",
       "direction": "in",
-      "path": "raw/missdig/{blobPath}",
+      "path": "missdig-raw/missdig/{blobPath}",
       "connection": "AzureWebJobsStorage"
     }
   ]
