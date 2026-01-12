@@ -22,17 +22,18 @@ def main(blob: func.InputStream):
         logging.error(f"Invalid JSON in blob {blob.name}: {e}")
         return
 
-    # Prefer top-level fields (most Miss Dig events)
-    ticket_number = raw.get("TicketNumber")
+    notification = raw.get("Notification", {})
+
+    ticket_number = notification.get("TicketNumber")
     event_type = raw.get("Event")
     event_time = raw.get("TimeStamp")
 
-    # Fallback if wrapped under Notification
     if not ticket_number or not event_type:
-        notification = raw.get("Notification", {})
-        ticket_number = ticket_number or notification.get("TicketNumber")
-        event_type = event_type or notification.get("Event")
-        event_time = event_time or notification.get("TimeStamp")
+        logging.error(
+            f"Missing required fields: "
+            f"TicketNumber={ticket_number}, Event={event_type}"
+        )
+        return
 
     if not ticket_number or not event_type:
         logging.error("Missing TicketNumber or Event — skipping")
