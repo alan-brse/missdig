@@ -5,7 +5,7 @@
       "name": "msg",
       "type": "queueTrigger",
       "direction": "in",
-      "queueName": "missdig-tickets",
+      "queueName": "missdig-normalized-events",
       "connection": "AzureWebJobsStorage"
     }
   ]
