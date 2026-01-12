@@ -10,6 +10,7 @@ TABLE_NAME = "MissDigTickets"
 STORAGE_CONN = os.environ["AzureWebJobsStorage"]
 
 table_service = TableServiceClient.from_connection_string(STORAGE_CONN)
+table_service.create_table_if_not_exists(TABLE_NAME)
 table_client = table_service.get_table_client(TABLE_NAME)
 
 
