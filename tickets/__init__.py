@@ -10,18 +10,14 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         table_name="MissDigTickets"
     )
 
-    entities = list(table.list_entities())
+    logging.warning(f"TABLE ENDPOINT: {table._client._endpoint}")
 
-    logging.warning(f"[DEBUG] MissDigTickets row count: {len(entities)}")
+    entities = list(table.query_entities("PartitionKey ne ''"))
 
-    # Convert to plain JSON-safe objects
-    rows = []
-    for e in entities:
-        row = dict(e)
-        rows.append(row)
+    logging.warning(f"ROW COUNT: {len(entities)}")
 
     return func.HttpResponse(
-        json.dumps(rows, default=str),
+        json.dumps([dict(e) for e in entities], default=str),
         mimetype="application/json",
         status_code=200
     )
