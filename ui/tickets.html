@@ -75,7 +75,7 @@
 
   <script>
     async function loadTickets() {
-      const res = await fetch("/tickets");
+      const res = await fetch("https://fa-missdig-dev-avahfvhxavarcwdn.eastus-01.azurewebsites.net/api/tickets");
       const data = await res.json();
 
       const tbody = document.querySelector("#tickets tbody");
