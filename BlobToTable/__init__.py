@@ -47,8 +47,13 @@ def main(blob: func.InputStream):
         "RowKey": "ticket",
 
         "TicketNumber": ticket_number,
+
+        "DigsiteAddress": raw.get("DigsiteAddress"),
+        "LegalStartDate": raw.get("LegalStartDateTime"),
+        "ResponseCode": raw.get("ResponseCode"),
+
         "LastEventType": event_type,
-        "LastEventAt": event_time or now,
+        "LastEventAt": event_time,
         "LastRawBlobUri": blob.uri,
     }
 
