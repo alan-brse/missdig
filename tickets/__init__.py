@@ -19,11 +19,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     for e in table.query_entities("PartitionKey ne ''"):
         rows.append({
             "ticketNumber": e.get("TicketNumber"),
-            #"status": e.get("LastEventType"),        # temporary mapping
+            "status": e.get("LastEventType"),        # temporary mapping
             "eventType": e.get("LastEventType"),
             "digsiteAddress": e.get("DigsiteAddress"),                    # not available yet
             "legalStartDate": e.get("LegalStartDate"),                    # not available yet
-            "lastUpdated": e.get("LastEventAt")
+            "lastUpdated": e.get("LastEventAt"),
+            "responseCode": e.get("ResponseCode")
         })
 
     return func.HttpResponse(
