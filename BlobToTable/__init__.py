@@ -24,7 +24,7 @@ def main(blob: func.InputStream):
         return
 
     notification = raw.get("Notification", {})
-
+    members = notification.get("Members", [])
     ticket_number = notification.get("TicketNumber")
     event_type = raw.get("Event")
     event_time = raw.get("TimeStamp")
@@ -48,9 +48,9 @@ def main(blob: func.InputStream):
 
         "TicketNumber": ticket_number,
 
-        "DigsiteAddress": raw.get("DigsiteAddress"),
-        "LegalStartDate": raw.get("LegalStartDateTime"),
-        "ResponseCode": raw.get("ResponseCode"),
+        "DigsiteAddress": notification.get("DigsiteAddress"),
+        "LegalStartDate": notification.get("LegalStartDateTime"),
+        "ResponseCode": members.get("ResponseCode"),
 
         "LastEventType": event_type,
         "LastEventAt": event_time,
