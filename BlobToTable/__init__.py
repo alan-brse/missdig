@@ -42,6 +42,14 @@ def main(blob: func.InputStream):
 
     now = datetime.now(timezone.utc).isoformat()
 
+    # Extract first non-null ResponseCode from Members list
+    response_code = None
+    for m in members:
+        if m.get("ResponseCode"):
+            response_code = m["ResponseCode"]
+            break
+
+
     entity = {
         "PartitionKey": ticket_number,
         "RowKey": "ticket",
@@ -50,7 +58,7 @@ def main(blob: func.InputStream):
 
         "DigsiteAddress": notification.get("DigsiteAddress"),
         "LegalStartDate": notification.get("LegalStartDateTime"),
-        "ResponseCode": members.get("ResponseCode"),
+        "ResponseCode": response_code,
 
         "LastEventType": event_type,
         "LastEventAt": event_time,
