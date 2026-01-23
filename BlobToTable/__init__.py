@@ -42,13 +42,27 @@ def main(blob: func.InputStream):
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Extract first non-null ResponseCode from Members list
+    # Extract first meaningful member response
+    station_code = None
     response_code = None
-    for m in members:
-        if m.get("ResponseCode"):
-            response_code = m["ResponseCode"]
-            break
+    posr_comments = None
+    posr_short_description = None
+    response_by = None
 
+    for m in members:
+        # pick the first member that has ANY meaningful response data
+        if (
+            m.get("ResponseCode")
+            or m.get("PosrComments")
+            or m.get("PosrShortDescription")
+            or m.get("ResponseBy")
+        ):
+            station_code = m.get("StationCodeId")
+            response_code = m.get("ResponseCode")
+            posr_comments = m.get("PosrComments")
+            posr_short_description = m.get("PosrShortDescription")
+            response_by = m.get("ResponseBy")
+            break
 
     entity = {
         "PartitionKey": ticket_number,
@@ -58,7 +72,12 @@ def main(blob: func.InputStream):
 
         "DigsiteAddress": notification.get("DigsiteAddress"),
         "LegalStartDate": notification.get("LegalStartDateTime"),
+
+        "StationCode": station_code,
         "ResponseCode": response_code,
+        "PosrComments": posr_comments,
+        "PosrShortDescription": posr_short_description,
+        "ResponseBy": response_by,
 
         "LastEventType": event_type,
         "LastEventAt": event_time,
