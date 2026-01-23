@@ -30,7 +30,7 @@ def main(mytimer):
 
     # 1️⃣ Query active tickets
     entities = table_client.query_entities(
-        filter="IsActive eq true"
+        query_filter="PartitionKey ne ''"
     )
 
     rows = list(entities)
