@@ -17,8 +17,13 @@ table_client = table_service.get_table_client(TABLE_NAME)
 
 blob_service = BlobServiceClient.from_connection_string(STORAGE_CONN)
 container_client = blob_service.get_container_client(EXPORT_CONTAINER)
-container_client.create_container(exist_ok=True)
+#container_client.create_container(exist_ok=True)
+from azure.core.exceptions import ResourceExistsError
 
+try:
+    container_client.create_container()
+except ResourceExistsError:
+    pass
 
 def main(mytimer):
     logging.info("Starting ticket Excel export")
