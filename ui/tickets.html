@@ -190,6 +190,21 @@
       }
     }
 
+    function sanitizeForId(str) {
+      // Sanitize string for use in DOM IDs - only allow alphanumeric and hyphens
+      if (!str) return '';
+      return str.toString().replace(/[^a-zA-Z0-9-]/g, '_');
+    }
+
+    function getValidStatusClass(status) {
+      // Whitelist of valid status classes
+      const validStatuses = ['OPEN', 'RESPONSES_IN_PROGRESS', 'READY', 'LEGAL_START'];
+      if (validStatuses.includes(status)) {
+        return status;
+      }
+      return ''; // Return empty string for unknown statuses
+    }
+
     function escapeHtml(unsafe) {
       if (!unsafe) return '-';
       return unsafe
@@ -240,21 +255,24 @@
       tbody.innerHTML = "";
 
       for (const t of data) {
+        // Sanitize ticket number for use in IDs
+        const ticketId = sanitizeForId(t.ticketNumber);
+        
         // Main ticket row
         const tr = document.createElement("tr");
         tr.className = "ticket-row";
-        tr.onclick = () => toggleTicketDetails(t.ticketNumber);
+        tr.onclick = () => toggleTicketDetails(ticketId);
 
         const membersText = t.memberCount > 0 
-          ? `${t.responseCount}/${t.memberCount} responded`
+          ? `${escapeHtml(t.responseCount)}/${escapeHtml(t.memberCount)} responded`
           : 'No data';
 
         tr.innerHTML = `
           <td>
-            <span class="expand-icon" id="icon-${escapeHtml(t.ticketNumber)}">▶</span>
+            <span class="expand-icon" id="icon-${ticketId}">▶</span>
             ${escapeHtml(t.ticketNumber)}
           </td>
-          <td><span class="status ${escapeHtml(t.status)}">${escapeHtml(t.status)}</span></td>
+          <td><span class="status ${getValidStatusClass(t.status)}">${escapeHtml(t.status)}</span></td>
           <td>${escapeHtml(t.eventType)}</td>
           <td>${escapeHtml(t.digsiteAddress ?? "")}</td>
           <td>${escapeHtml(t.legalStartDate ?? "")}</td>
@@ -268,7 +286,7 @@
         // Member details row
         const detailsRow = document.createElement("tr");
         detailsRow.className = "member-details-row";
-        detailsRow.id = `details-${t.ticketNumber}`;
+        detailsRow.id = `details-${ticketId}`;
 
         const detailsCell = document.createElement("td");
         detailsCell.className = "member-details-cell";

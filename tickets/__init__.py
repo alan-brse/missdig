@@ -17,6 +17,13 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     rows = []
 
     for e in table.query_entities("PartitionKey ne ''"):
+        # Parse members JSON safely
+        members = []
+        try:
+            members = json.loads(e.get("Members", "[]"))
+        except (json.JSONDecodeError, TypeError):
+            members = []
+        
         rows.append({
             "ticketNumber": e.get("TicketNumber"),
             "status": e.get("LastEventType"),        # temporary mapping
@@ -27,7 +34,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "responseCode": e.get("ResponseCode"),
             "memberCount": e.get("MemberCount", 0),
             "responseCount": e.get("ResponseCount", 0),
-            "members": json.loads(e.get("Members", "[]"))
+            "members": members
         })
 
     return func.HttpResponse(
