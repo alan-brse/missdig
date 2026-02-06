@@ -64,6 +64,10 @@ def main(blob: func.InputStream):
             response_by = m.get("ResponseBy")
             break
 
+    # Calculate member statistics
+    member_count = len(members)
+    response_count = sum(1 for m in members if m.get("ResponseCode"))
+
     entity = {
         "PartitionKey": ticket_number,
         "RowKey": "ticket",
@@ -78,6 +82,10 @@ def main(blob: func.InputStream):
         "PosrComments": posr_comments,
         "PosrShortDescription": posr_short_description,
         "ResponseBy": response_by,
+
+        "Members": json.dumps(members),
+        "MemberCount": member_count,
+        "ResponseCount": response_count,
 
         "LastEventType": event_type,
         "LastEventAt": event_time,
