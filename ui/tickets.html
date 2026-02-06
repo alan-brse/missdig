@@ -190,6 +190,17 @@
       }
     }
 
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '-';
+      return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
     function renderMemberDetails(members) {
       if (!members || members.length === 0) {
         return '<div class="no-data">No members data available (old ticket)</div>';
@@ -199,23 +210,23 @@
         <div class="member-item">
           <div class="member-field">
             <span class="member-field-label">Station Code:</span>
-            <span class="member-field-value">${member.StationCodeId || '-'}</span>
+            <span class="member-field-value">${escapeHtml(member.StationCodeId)}</span>
           </div>
           <div class="member-field">
             <span class="member-field-label">Response Code:</span>
-            <span class="member-field-value">${member.ResponseCode || 'No response'}</span>
+            <span class="member-field-value">${escapeHtml(member.ResponseCode) || 'No response'}</span>
           </div>
           <div class="member-field">
             <span class="member-field-label">POSR Comments:</span>
-            <span class="member-field-value">${member.PosrComments || '-'}</span>
+            <span class="member-field-value">${escapeHtml(member.PosrComments)}</span>
           </div>
           <div class="member-field">
             <span class="member-field-label">POSR Short Description:</span>
-            <span class="member-field-value">${member.PosrShortDescription || '-'}</span>
+            <span class="member-field-value">${escapeHtml(member.PosrShortDescription)}</span>
           </div>
           <div class="member-field">
             <span class="member-field-label">Response By:</span>
-            <span class="member-field-value">${member.ResponseBy || '-'}</span>
+            <span class="member-field-value">${escapeHtml(member.ResponseBy)}</span>
           </div>
         </div>
       `).join('');
@@ -240,14 +251,14 @@
 
         tr.innerHTML = `
           <td>
-            <span class="expand-icon" id="icon-${t.ticketNumber}">▶</span>
-            ${t.ticketNumber}
+            <span class="expand-icon" id="icon-${escapeHtml(t.ticketNumber)}">▶</span>
+            ${escapeHtml(t.ticketNumber)}
           </td>
-          <td><span class="status ${t.status}">${t.status}</span></td>
-          <td>${t.eventType}</td>
-          <td>${t.digsiteAddress ?? ""}</td>
-          <td>${t.legalStartDate ?? ""}</td>
-          <td>${t.responseCode ?? ""}</td>
+          <td><span class="status ${escapeHtml(t.status)}">${escapeHtml(t.status)}</span></td>
+          <td>${escapeHtml(t.eventType)}</td>
+          <td>${escapeHtml(t.digsiteAddress ?? "")}</td>
+          <td>${escapeHtml(t.legalStartDate ?? "")}</td>
+          <td>${escapeHtml(t.responseCode ?? "")}</td>
           <td class="members-count">${membersText}</td>
           <td class="muted">${new Date(t.lastUpdated).toLocaleString()}</td>
         `;
