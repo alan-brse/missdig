@@ -37,6 +37,98 @@
       background: #f9fafb;
     }
 
+    .ticket-row {
+      cursor: pointer;
+    }
+
+    .ticket-row:hover {
+      background: #f0f9ff;
+    }
+
+    .expand-icon {
+      display: inline-block;
+      margin-right: 8px;
+      transition: transform 0.2s;
+      font-size: 12px;
+    }
+
+    .expand-icon.expanded {
+      transform: rotate(90deg);
+    }
+
+    .member-details-row {
+      display: none;
+    }
+
+    .member-details-row.visible {
+      display: table-row;
+    }
+
+    .member-details-cell {
+      padding: 0;
+      background: #f8f9fb;
+    }
+
+    .member-details-panel {
+      margin: 12px 24px;
+      padding: 16px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .member-details-panel h3 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .member-item {
+      padding: 12px;
+      margin-bottom: 8px;
+      background: #f9fafb;
+      border-radius: 6px;
+      border-left: 3px solid #3b82f6;
+    }
+
+    .member-item:nth-child(even) {
+      background: #f3f4f6;
+    }
+
+    .member-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .member-field {
+      display: flex;
+      margin-bottom: 6px;
+    }
+
+    .member-field:last-child {
+      margin-bottom: 0;
+    }
+
+    .member-field-label {
+      font-weight: 600;
+      min-width: 180px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    .member-field-value {
+      color: #111827;
+      font-size: 13px;
+    }
+
+    .no-data {
+      color: #9ca3af;
+      font-style: italic;
+      text-align: center;
+      padding: 16px;
+    }
+
     .status {
       font-weight: 600;
       padding: 4px 8px;
@@ -51,6 +143,11 @@
 
     .muted {
       color: #6b7280;
+    }
+
+    .members-count {
+      font-weight: 500;
+      color: #374151;
     }
   </style>
 </head>
@@ -68,6 +165,7 @@
         <th>Address</th>
         <th>Legal Start</th>
         <th>Response Code</th>
+        <th>Members</th>
         <th>Last Updated</th>
       </tr>
     </thead>
@@ -75,6 +173,80 @@
   </table>
 
   <script>
+    const expandedTickets = new Set();
+
+    function toggleTicketDetails(ticketNumber) {
+      const detailsRow = document.getElementById(`details-${ticketNumber}`);
+      const icon = document.getElementById(`icon-${ticketNumber}`);
+
+      if (expandedTickets.has(ticketNumber)) {
+        expandedTickets.delete(ticketNumber);
+        detailsRow.classList.remove('visible');
+        icon.classList.remove('expanded');
+      } else {
+        expandedTickets.add(ticketNumber);
+        detailsRow.classList.add('visible');
+        icon.classList.add('expanded');
+      }
+    }
+
+    function sanitizeForId(str) {
+      // Sanitize string for use in DOM IDs - only allow alphanumeric and hyphens
+      if (!str) return '';
+      return str.toString().replace(/[^a-zA-Z0-9-]/g, '_');
+    }
+
+    function getValidStatusClass(status) {
+      // Whitelist of valid status classes
+      const validStatuses = ['OPEN', 'RESPONSES_IN_PROGRESS', 'READY', 'LEGAL_START'];
+      if (validStatuses.includes(status)) {
+        return status;
+      }
+      return ''; // Return empty string for unknown statuses
+    }
+
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '-';
+      return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function renderMemberDetails(members) {
+      if (!members || members.length === 0) {
+        return '<div class="no-data">No members data available (old ticket)</div>';
+      }
+
+      return members.map(member => `
+        <div class="member-item">
+          <div class="member-field">
+            <span class="member-field-label">Station Code:</span>
+            <span class="member-field-value">${escapeHtml(member.StationCodeId)}</span>
+          </div>
+          <div class="member-field">
+            <span class="member-field-label">Response Code:</span>
+            <span class="member-field-value">${escapeHtml(member.ResponseCode) || 'No response'}</span>
+          </div>
+          <div class="member-field">
+            <span class="member-field-label">POSR Comments:</span>
+            <span class="member-field-value">${escapeHtml(member.PosrComments)}</span>
+          </div>
+          <div class="member-field">
+            <span class="member-field-label">POSR Short Description:</span>
+            <span class="member-field-value">${escapeHtml(member.PosrShortDescription)}</span>
+          </div>
+          <div class="member-field">
+            <span class="member-field-label">Response By:</span>
+            <span class="member-field-value">${escapeHtml(member.ResponseBy)}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
     async function loadTickets() {
       const res = await fetch("https://fa-missdig-dev-avahfvhxavarcwdn.eastus-01.azurewebsites.net/api/tickets");
       const data = await res.json();
@@ -83,19 +255,53 @@
       tbody.innerHTML = "";
 
       for (const t of data) {
+        // Sanitize ticket number for use in IDs
+        const ticketId = sanitizeForId(t.ticketNumber);
+        
+        // Main ticket row
         const tr = document.createElement("tr");
+        tr.className = "ticket-row";
+        tr.onclick = () => toggleTicketDetails(ticketId);
+
+        const membersText = t.memberCount > 0 
+          ? `${escapeHtml(t.responseCount)}/${escapeHtml(t.memberCount)} responded`
+          : 'No data';
 
         tr.innerHTML = `
-          <td>${t.ticketNumber}</td>
-          <td><span class="status ${t.status}">${t.status}</span></td>
-          <td>${t.eventType}</td>
-          <td>${t.digsiteAddress ?? ""}</td>
-          <td>${t.legalStartDate ?? ""}</td>
-          <td>${t.responseCode ?? ""}</td>
+          <td>
+            <span class="expand-icon" id="icon-${ticketId}">▶</span>
+            ${escapeHtml(t.ticketNumber)}
+          </td>
+          <td><span class="status ${getValidStatusClass(t.status)}">${escapeHtml(t.status)}</span></td>
+          <td>${escapeHtml(t.eventType)}</td>
+          <td>${escapeHtml(t.digsiteAddress ?? "")}</td>
+          <td>${escapeHtml(t.legalStartDate ?? "")}</td>
+          <td>${escapeHtml(t.responseCode ?? "")}</td>
+          <td class="members-count">${membersText}</td>
           <td class="muted">${new Date(t.lastUpdated).toLocaleString()}</td>
         `;
 
         tbody.appendChild(tr);
+
+        // Member details row
+        const detailsRow = document.createElement("tr");
+        detailsRow.className = "member-details-row";
+        detailsRow.id = `details-${ticketId}`;
+
+        const detailsCell = document.createElement("td");
+        detailsCell.className = "member-details-cell";
+        detailsCell.colSpan = 8;
+
+        const panel = document.createElement("div");
+        panel.className = "member-details-panel";
+        panel.innerHTML = `
+          <h3>Member Stations</h3>
+          ${renderMemberDetails(t.members)}
+        `;
+
+        detailsCell.appendChild(panel);
+        detailsRow.appendChild(detailsCell);
+        tbody.appendChild(detailsRow);
       }
     }
 
