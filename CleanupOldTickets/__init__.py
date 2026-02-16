@@ -77,10 +77,6 @@ def main(mytimer):
                 skipped_count += 1
                 continue
 
-            # Make timezone aware if not already
-            if legal_start_date.tzinfo is None:
-                legal_start_date = legal_start_date.replace(tzinfo=timezone.utc)
-
             # Check if the ticket is older than legal start + 30 days
             ticket_expiry = legal_start_date + timedelta(days=30)
 
@@ -99,9 +95,16 @@ def main(mytimer):
             else:
                 skipped_count += 1
 
+        except ValueError as e:
+            logging.error(
+                f"Date parsing error for ticket {ticket_number}: {e}"
+            )
+            skipped_count += 1
+            continue
         except Exception as e:
             logging.error(
-                f"Error processing ticket {ticket_number}: {e}"
+                f"Unexpected error processing ticket {ticket_number}: {e}",
+                exc_info=True
             )
             skipped_count += 1
             continue
