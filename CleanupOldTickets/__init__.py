@@ -14,9 +14,9 @@ table_client = table_service.get_table_client(TABLE_NAME)
 def main(mytimer):
     logging.info("Starting cleanup of old tickets")
 
-    # Calculate the cutoff date: current date - 30 days
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
-    logging.info(f"Cutoff date for cleanup: {cutoff_date.isoformat()}")
+    # Current date for comparison
+    current_date = datetime.now(timezone.utc)
+    logging.info(f"Current date: {current_date.isoformat()}")
 
     # Query all tickets
     entities = table_client.query_entities(
@@ -81,10 +81,10 @@ def main(mytimer):
             if legal_start_date.tzinfo is None:
                 legal_start_date = legal_start_date.replace(tzinfo=timezone.utc)
 
-            # Check if the ticket is older than cutoff (legal start + 30 days)
+            # Check if the ticket is older than legal start + 30 days
             ticket_expiry = legal_start_date + timedelta(days=30)
 
-            if ticket_expiry < cutoff_date:
+            if ticket_expiry < current_date:
                 # Delete the ticket
                 table_client.delete_entity(
                     partition_key=entity["PartitionKey"],
