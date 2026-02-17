@@ -64,13 +64,15 @@ def main(blob: func.InputStream):
         "LastRawBlobUri": blob.uri,
     }
 
-    # Only update LastEventType for TICKET_CREATED events
-    # This prevents member response events from overwriting the ticket creation event
+    # Only set LastEventType for TICKET_CREATED events to preserve the creation event type.
+    # This assumes TICKET_CREATED is always the first event for a ticket.
+    # MEMBER_RESPONSE and other events will not overwrite this field due to MERGE mode.
     if event_type == "TICKET_CREATED":
         entity["LastEventType"] = event_type
 
     try:
-        # Use MERGE mode to preserve existing fields (like LastEventType) when updating
+        # Use MERGE mode to preserve existing fields not included in this update.
+        # Most importantly, this preserves LastEventType when MEMBER_RESPONSE events update member data.
         table_client.upsert_entity(entity, mode=UpdateMode.MERGE)
         logging.info(f"Upserted base ticket row {ticket_number}")
     except Exception as e:
