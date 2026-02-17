@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 
 import azure.functions as func
-from azure.data.tables import TableServiceClient
+from azure.data.tables import TableServiceClient, UpdateMode
 
 TABLE_NAME = "MissDigTickets"
 STORAGE_CONN = os.environ["AzureWebJobsStorage"]
@@ -15,6 +15,19 @@ table_client = table_service.get_table_client(TABLE_NAME)
 
 
 def main(blob: func.InputStream):
+    """
+    Process incoming Miss Dig event blobs and update the tickets table.
+    
+    Expected behavior:
+    - TICKET_CREATED events: Initialize ticket with LastEventType set to TICKET_CREATED
+    - MEMBER_RESPONSE events: Update member data, preserve existing LastEventType
+    - Other events: Update relevant fields, preserve existing LastEventType
+    
+    Assumptions:
+    - TICKET_CREATED events arrive before MEMBER_RESPONSE events for a ticket
+    - Events contain the current full state of members (not deltas)
+    - MERGE mode is used to preserve LastEventType while updating other fields
+    """
     logging.info(f"BlobToTable fired for {blob.name}")
 
     try:
@@ -42,32 +55,11 @@ def main(blob: func.InputStream):
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Extract first meaningful member response
-    station_code = None
-    response_code = None
-    posr_comments = None
-    posr_short_description = None
-    response_by = None
-
-    for m in members:
-        # pick the first member that has ANY meaningful response data
-        if (
-            m.get("ResponseCode")
-            or m.get("PosrComments")
-            or m.get("PosrShortDescription")
-            or m.get("ResponseBy")
-        ):
-            station_code = m.get("StationCodeId")
-            response_code = m.get("ResponseCode")
-            posr_comments = m.get("PosrComments")
-            posr_short_description = m.get("PosrShortDescription")
-            response_by = m.get("ResponseBy")
-            break
-
     # Calculate member statistics
     member_count = len(members)
     response_count = sum(1 for m in members if m.get("ResponseCode"))
 
+    # Build base entity with always-updated fields
     entity = {
         "PartitionKey": ticket_number,
         "RowKey": "ticket",
@@ -77,23 +69,24 @@ def main(blob: func.InputStream):
         "DigsiteAddress": notification.get("DigsiteAddress"),
         "LegalStartDate": notification.get("LegalStartDateTime"),
 
-        "StationCode": station_code,
-        "ResponseCode": response_code,
-        "PosrComments": posr_comments,
-        "PosrShortDescription": posr_short_description,
-        "ResponseBy": response_by,
-
         "Members": json.dumps(members),
         "MemberCount": member_count,
         "ResponseCount": response_count,
 
-        "LastEventType": event_type,
         "LastEventAt": event_time,
         "LastRawBlobUri": blob.uri,
     }
 
+    # Only set LastEventType for TICKET_CREATED events to preserve the creation event type.
+    # This assumes TICKET_CREATED is always the first event for a ticket.
+    # MEMBER_RESPONSE and other events will not overwrite this field due to MERGE mode.
+    if event_type == "TICKET_CREATED":
+        entity["LastEventType"] = event_type
+
     try:
-        table_client.upsert_entity(entity)
+        # Use MERGE mode to preserve existing fields not included in this update.
+        # Most importantly, this preserves LastEventType when MEMBER_RESPONSE events update member data.
+        table_client.upsert_entity(entity, mode=UpdateMode.MERGE)
         logging.info(f"Upserted base ticket row {ticket_number}")
     except Exception as e:
         logging.error(f"Table write failed for {ticket_number}: {e}")

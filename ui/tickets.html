@@ -164,7 +164,6 @@
         <th>Event</th>
         <th>Address</th>
         <th>Legal Start</th>
-        <th>Response Code</th>
         <th>Members</th>
         <th>Last Updated</th>
       </tr>
@@ -276,7 +275,6 @@
           <td>${escapeHtml(t.eventType)}</td>
           <td>${escapeHtml(t.digsiteAddress ?? "")}</td>
           <td>${escapeHtml(t.legalStartDate ?? "")}</td>
-          <td>${escapeHtml(t.responseCode ?? "")}</td>
           <td class="members-count">${membersText}</td>
           <td class="muted">${new Date(t.lastUpdated).toLocaleString()}</td>
         `;
@@ -290,7 +288,7 @@
 
         const detailsCell = document.createElement("td");
         detailsCell.className = "member-details-cell";
-        detailsCell.colSpan = 8;
+        detailsCell.colSpan = 7;
 
         const panel = document.createElement("div");
         panel.className = "member-details-panel";
