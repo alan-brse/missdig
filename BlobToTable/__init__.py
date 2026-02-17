@@ -15,6 +15,19 @@ table_client = table_service.get_table_client(TABLE_NAME)
 
 
 def main(blob: func.InputStream):
+    """
+    Process incoming Miss Dig event blobs and update the tickets table.
+    
+    Expected behavior:
+    - TICKET_CREATED events: Initialize ticket with LastEventType set to TICKET_CREATED
+    - MEMBER_RESPONSE events: Update member data, preserve existing LastEventType
+    - Other events: Update relevant fields, preserve existing LastEventType
+    
+    Assumptions:
+    - TICKET_CREATED events arrive before MEMBER_RESPONSE events for a ticket
+    - Events contain the current full state of members (not deltas)
+    - MERGE mode is used to preserve LastEventType while updating other fields
+    """
     logging.info(f"BlobToTable fired for {blob.name}")
 
     try:
