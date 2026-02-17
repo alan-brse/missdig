@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 
 import azure.functions as func
-from azure.data.tables import TableServiceClient
+from azure.data.tables import TableServiceClient, UpdateMode
 
 TABLE_NAME = "MissDigTickets"
 STORAGE_CONN = os.environ["AzureWebJobsStorage"]
@@ -70,7 +70,8 @@ def main(blob: func.InputStream):
         entity["LastEventType"] = event_type
 
     try:
-        table_client.upsert_entity(entity)
+        # Use MERGE mode to preserve existing fields (like LastEventType) when updating
+        table_client.upsert_entity(entity, mode=UpdateMode.MERGE)
         logging.info(f"Upserted base ticket row {ticket_number}")
     except Exception as e:
         logging.error(f"Table write failed for {ticket_number}: {e}")
