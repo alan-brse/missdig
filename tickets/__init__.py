@@ -31,7 +31,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "digsiteAddress": e.get("DigsiteAddress"),                    # not available yet
             "legalStartDate": e.get("LegalStartDate"),                    # not available yet
             "lastUpdated": e.get("LastEventAt"),
-            "responseCode": e.get("ResponseCode"),
             "memberCount": e.get("MemberCount", 0),
             "responseCount": e.get("ResponseCount", 0),
             "members": members

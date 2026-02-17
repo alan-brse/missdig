@@ -42,32 +42,11 @@ def main(blob: func.InputStream):
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Extract first meaningful member response
-    station_code = None
-    response_code = None
-    posr_comments = None
-    posr_short_description = None
-    response_by = None
-
-    for m in members:
-        # pick the first member that has ANY meaningful response data
-        if (
-            m.get("ResponseCode")
-            or m.get("PosrComments")
-            or m.get("PosrShortDescription")
-            or m.get("ResponseBy")
-        ):
-            station_code = m.get("StationCodeId")
-            response_code = m.get("ResponseCode")
-            posr_comments = m.get("PosrComments")
-            posr_short_description = m.get("PosrShortDescription")
-            response_by = m.get("ResponseBy")
-            break
-
     # Calculate member statistics
     member_count = len(members)
     response_count = sum(1 for m in members if m.get("ResponseCode"))
 
+    # Build base entity with always-updated fields
     entity = {
         "PartitionKey": ticket_number,
         "RowKey": "ticket",
@@ -77,20 +56,18 @@ def main(blob: func.InputStream):
         "DigsiteAddress": notification.get("DigsiteAddress"),
         "LegalStartDate": notification.get("LegalStartDateTime"),
 
-        "StationCode": station_code,
-        "ResponseCode": response_code,
-        "PosrComments": posr_comments,
-        "PosrShortDescription": posr_short_description,
-        "ResponseBy": response_by,
-
         "Members": json.dumps(members),
         "MemberCount": member_count,
         "ResponseCount": response_count,
 
-        "LastEventType": event_type,
         "LastEventAt": event_time,
         "LastRawBlobUri": blob.uri,
     }
+
+    # Only update LastEventType for TICKET_CREATED events
+    # This prevents member response events from overwriting the ticket creation event
+    if event_type == "TICKET_CREATED":
+        entity["LastEventType"] = event_type
 
     try:
         table_client.upsert_entity(entity)
